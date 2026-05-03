@@ -1,0 +1,16 @@
+name = "agentlayer-mcp-server"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+NEON_DATABASE_URL = "postgres://user:pass@host/db"
+FIRECRAWL_API_KEY = ""
+STRIPE_SECRET_KEY = ""
+STRIPE_STARTER_PRICE_ID = ""
+STRIPE_PRO_MONTHLY_PRICE_ID = ""
+STRIPE_SCALE_MONTHLY_PRICE_ID = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agentlayer"
+database_id = ""
