@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { Stripe } from 'stripe';
 import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
+import qualityScoresV1 from './routes/v1-quality-scores.js';
 
 type Bindings = {
   NEON_DATABASE_URL: string;
@@ -102,24 +103,8 @@ app.get('/api-deprecations', async (c) => {
   }
 });
 
-// GET /quality-scores - Returns model quality scores (includes Reddit/HN sentiment)
-app.get('/quality-scores', async (c) => {
-  try {
-    const sql = neon(c.env.NEON_DATABASE_URL);
-    const refresh = c.req.query('refresh') === 'true';
-    
-    if (refresh) {
-      // Trigger fresh sentiment scraping
-      const records = await runSentimentScraper();
-      return c.json({ data: records, refreshed: true, timestamp: new Date().toISOString() });
-    }
-    
-    const scores = await sql`SELECT * FROM quality_scores ORDER BY score DESC`;
-    return c.json({ data: scores, refreshed: false, timestamp: new Date().toISOString() });
-  } catch (error) {
-    return c.json({ error: 'Failed to fetch quality scores' }, 500);
-  }
-});
+// Mount v1 routes
+app.route('/v1/quality-scores', qualityScoresV1);
 
 // POST /agent-spend - Log agent API spend (x402 micropayment support)
 app.post('/agent-spend', async (c) => {
