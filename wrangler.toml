@@ -2,8 +2,10 @@ name = "agentlayer-mcp-server"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+# To set secrets: wrangler secret put NEON_DATABASE_URL
+# Format: postgres://user:pass@ep-xxx.neon.tech/dbname?sslmode=require
+
 [vars]
-NEON_DATABASE_URL = "postgres://user:pass@host/db"
 FIRECRAWL_API_KEY = ""
 STRIPE_SECRET_KEY = ""
 STRIPE_STARTER_PRICE_ID = ""
