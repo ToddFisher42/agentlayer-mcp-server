@@ -1,13 +1,18 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { Stripe } from 'stripe';
+import Stripe from 'stripe';
 import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
 import qualityScoresV1 from './routes/v1-quality-scores.js';
+
+// Cloudflare Workers types
+type D1Database = any;
+type KVNamespace = any;
 
 type Bindings = {
   NEON_DATABASE_URL: string;
   FIRECRAWL_API_KEY: string;
   STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
   DB: D1Database;
   RATE_LIMIT_KV: KVNamespace;
 };
@@ -210,10 +215,13 @@ app.get('/agent-spend', async (c) => {
 app.post('/webhooks/stripe', async (c) => {
   const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
   const signature = c.req.header('stripe-signature');
-  // TODO: Add webhook secret verification
+  const webhookSecret = c.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return c.json({ error: 'Webhook secret not configured' }, 500);
+  }
   try {
     const body = await c.req.text();
-    const event = stripe.webhooks.constructEvent(body, signature!, '');
+    const event = stripe.webhooks.constructEvent(body, signature!, webhookSecret);
     // Handle subscription events
     switch (event.type) {
       case 'customer.subscription.created':
@@ -225,6 +233,57 @@ app.post('/webhooks/stripe', async (c) => {
     return c.json({ received: true });
   } catch (error) {
     return c.json({ error: 'Webhook error' }, 400);
+  }
+});
+
+// Stripe checkout endpoints for subscription tiers
+app.post('/checkout/:tier', async (c) => {
+  try {
+    const tier = c.req.param('tier').toLowerCase();
+    const { email, success_url, cancel_url } = await c.req.json();
+
+    if (!email || !success_url || !cancel_url) {
+      return c.json({ error: 'Missing required fields: email, success_url, cancel_url' }, 400);
+    }
+
+    const validTiers = ['starter', 'pro', 'scale'];
+    if (!validTiers.includes(tier)) {
+      return c.json({ error: `Invalid tier. Must be one of: ${validTiers.join(', ')}` }, 400);
+    }
+
+    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+
+    // Get or create customer
+    const customers = await stripe.customers.list({ email, limit: 1 });
+    let customer = customers.data[0];
+    if (!customer) {
+      customer = await stripe.customers.create({ email });
+    }
+
+    // Get price ID based on tier
+    const priceIds: Record<string, string> = {
+      starter: c.env.STRIPE_STARTER_PRICE_ID!,
+      pro: c.env.STRIPE_PRO_MONTHLY_PRICE_ID!,
+      scale: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID!,
+    };
+    const priceId = priceIds[tier];
+    if (!priceId) {
+      return c.json({ error: 'Price ID not configured for tier' }, 500);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customer.id,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url,
+      cancel_url,
+      metadata: { tier },
+    });
+
+    return c.json({ session_id: session.id, url: session.url });
+  } catch (error) {
+    return c.json({ error: 'Failed to create checkout session' }, 500);
   }
 });
 

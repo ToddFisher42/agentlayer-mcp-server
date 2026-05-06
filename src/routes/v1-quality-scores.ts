@@ -2,7 +2,11 @@ import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { runSentimentScraper } from '../scrapers/reddit-hn-sentiment.js';
 
-const app = new Hono();
+type Bindings = {
+  NEON_DATABASE_URL: string;
+};
+
+const app = new Hono<{ Bindings: Bindings }>();
 
 // GET /v1/quality-scores - Returns quality scores from Reddit/HN sentiment data
 app.get('/v1/quality-scores', async (c) => {

@@ -1,4 +1,4 @@
-import { Stripe } from 'stripe';
+import Stripe from 'stripe';
 
 export interface SubscriptionTier {
   name: string;
@@ -40,7 +40,7 @@ export class StripeBillingService {
   private stripe: Stripe;
 
   constructor(secretKey: string) {
-    this.stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' });
+    this.stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' as any });
   }
 
   async createCheckoutSession(customerId: string | undefined, tier: string, successUrl: string, cancelUrl: string) {

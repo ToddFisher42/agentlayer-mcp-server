@@ -19,4 +19,8 @@ database_id = ""
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
+id = "" # Create with: wrangler kv namespace create "agentlayer-rate-limits"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
 id = "" # Run: wrangler kv:namespace create "RATE_LIMIT_KV"
