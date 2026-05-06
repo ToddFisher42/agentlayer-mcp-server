@@ -56,7 +56,7 @@ async function verifyDatabase() {
     console.log('\nRow counts:');
     for (const table of REQUIRED_TABLES) {
       if (existingTables.includes(table)) {
-        const count = await sql`SELECT COUNT(*) as count FROM ${sql(table)}`;
+        const count = await sql(`SELECT COUNT(*) as count FROM "${table}"`);
         console.log(`  ${table}: ${count[0].count} rows`);
       }
     }
