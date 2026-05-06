@@ -11,6 +11,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
     "@neondatabase/serverless": "^0.9.5",
+    "@x402/core": "^2.11.0",
     "hono": "^4.0.0",
     "pg": "^8.20.0",
     "stripe": "^14.0.0"
