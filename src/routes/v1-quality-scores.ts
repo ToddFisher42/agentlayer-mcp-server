@@ -17,7 +17,10 @@ app.get('/v1/quality-scores', async (c) => {
 
     if (refresh) {
       // Trigger fresh sentiment scraping from Reddit/HN
-      const records = await runSentimentScraper();
+      const records = await runSentimentScraper({
+        NEON_DATABASE_URL: c.env.NEON_DATABASE_URL,
+        FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY || '',
+      });
 
       if (model) {
         const filtered = records.filter(r => r.model.toLowerCase() === model.toLowerCase());
@@ -65,7 +68,10 @@ app.get('/v1/quality-scores', async (c) => {
 // POST /v1/quality-scores/refresh - Force refresh sentiment data
 app.post('/v1/quality-scores/refresh', async (c) => {
   try {
-    const records = await runSentimentScraper();
+    const records = await runSentimentScraper({
+      NEON_DATABASE_URL: c.env.NEON_DATABASE_URL,
+      FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY || '',
+    });
     return c.json({
       message: 'Quality scores refreshed successfully',
       data: records,

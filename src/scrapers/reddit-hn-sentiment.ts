@@ -1,7 +1,9 @@
 import { neon } from '@neondatabase/serverless';
 
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY!;
-const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL!;
+interface ScraperEnv {
+  FIRECRAWL_API_KEY: string;
+  NEON_DATABASE_URL: string;
+}
 
 const AI_MODELS = ['GPT-4', 'GPT-3.5', 'Claude 3', 'Claude 2', 'Llama 3', 'Llama 2', 'Mistral', 'Gemini', 'PaLM'] as const;
 const POSITIVE_WORDS = ['great', 'good', 'excellent', 'impressive', 'works well', 'better', 'faster', 'accurate', 'reliable'];
@@ -23,12 +25,12 @@ interface QualityScoreRecord {
   timestamp: Date;
 }
 
-async function scrapeWithFirecrawl(url: string): Promise<any> {
+async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<any> {
   const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${FIRECRAWL_API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       url,
@@ -39,9 +41,9 @@ async function scrapeWithFirecrawl(url: string): Promise<any> {
   return response.json();
 }
 
-async function scrapeReddit(subreddit: string): Promise<Post[]> {
+async function scrapeReddit(subreddit: string, apiKey: string): Promise<Post[]> {
   try {
-    const data = await scrapeWithFirecrawl(`https://www.reddit.com/r/${subreddit}/new.json?limit=100`);
+    const data = await scrapeWithFirecrawl(`https://www.reddit.com/r/${subreddit}/new.json?limit=100`, apiKey);
     return data.data.children.map((child: any) => ({
       title: child.data.title,
       text: child.data.selftext || '',
@@ -55,7 +57,7 @@ async function scrapeReddit(subreddit: string): Promise<Post[]> {
   }
 }
 
-async function scrapeHN(): Promise<Post[]> {
+async function scrapeHN(apiKey: string): Promise<Post[]> {
   try {
     const storyIdsRes = await fetch('https://hacker-news.firebaseio.com/v0/newstories.json');
     const storyIds: number[] = await storyIdsRes.json();
@@ -97,8 +99,8 @@ function computeSentiment(text: string): number {
   return Math.max(0, Math.min(1, (score + 5) / 10));
 }
 
-async function aggregateAndStoreScores(posts: Post[]): Promise<QualityScoreRecord[]> {
-  const sql = neon(NEON_DATABASE_URL);
+async function aggregateAndStoreScores(posts: Post[], dbUrl: string): Promise<QualityScoreRecord[]> {
+  const sql = neon(dbUrl);
   const modelData: Record<string, { total: number; count: number; sources: Set<string> }> = {};
 
   for (const post of posts) {
@@ -138,19 +140,19 @@ async function aggregateAndStoreScores(posts: Post[]): Promise<QualityScoreRecor
   return records;
 }
 
-export async function runSentimentScraper(): Promise<QualityScoreRecord[]> {
+export async function runSentimentScraper(env: ScraperEnv): Promise<QualityScoreRecord[]> {
   console.log('Starting Reddit/HN sentiment scraper...');
   const [redditPosts, hnPosts] = await Promise.all([
     Promise.all([
-      scrapeReddit('MachineLearning'),
-      scrapeReddit('LocalLLaMA'),
-      scrapeReddit('artificial'),
+      scrapeReddit('MachineLearning', env.FIRECRAWL_API_KEY),
+      scrapeReddit('LocalLLaMA', env.FIRECRAWL_API_KEY),
+      scrapeReddit('artificial', env.FIRECRAWL_API_KEY),
     ]),
-    scrapeHN(),
+    scrapeHN(env.FIRECRAWL_API_KEY),
   ]);
   const allPosts = [...redditPosts.flat(), ...hnPosts];
   console.log(`Scraped ${allPosts.length} total posts`);
-  const records = await aggregateAndStoreScores(allPosts);
+  const records = await aggregateAndStoreScores(allPosts, env.NEON_DATABASE_URL);
   console.log(`Stored ${records.length} quality score records`);
   return records;
 }

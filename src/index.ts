@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { StripeBillingService, StripeBillingConfig } from './services/stripe-billing.js';
 import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
 import qualityScoresV1 from './routes/v1-quality-scores.js';
+import { HTTPFacilitatorClient } from '@x402/core/server';
 
 // Cloudflare Workers types
 type D1Database = any;
@@ -17,6 +18,7 @@ type Bindings = {
   STRIPE_STARTER_PRICE_ID: string;
   STRIPE_PRO_MONTHLY_PRICE_ID: string;
   STRIPE_SCALE_MONTHLY_PRICE_ID: string;
+  X402_PAYMENT_ADDRESS: string;
   DB: D1Database;
   RATE_LIMIT_KV: KVNamespace;
 };
@@ -173,16 +175,72 @@ app.route('/v1/quality-scores', qualityScoresV1);
 app.post('/agent-spend', async (c) => {
   try {
     const body = await c.req.json();
-    const { agent_id, model, tokens_used, cost, payment_receipt } = body;
+    const { agent_id, model, tokens_used, cost, payment_receipt, payment_payload } = body;
 
     if (!agent_id || !model || !tokens_used || !cost) {
       return c.json({ error: 'Missing required fields' }, 400);
     }
 
-    // Validate x402 payment receipt if provided
-    if (payment_receipt) {
-      // TODO: Verify x402 payment receipt
-      console.log('x402 payment receipt:', payment_receipt);
+    // Verify x402 payment if payment_payload is provided
+    if (payment_payload) {
+      try {
+        const facilitatorClient = new HTTPFacilitatorClient();
+
+        // Build payment requirements for this endpoint
+        const paymentRequirements: any = {
+          scheme: 'exact',
+          network: 'base',
+          amount: Math.round(cost * 1000000).toString(), // Convert to atomic units (6 decimals for USDC)
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA0293',
+          payTo: c.env.X402_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000',
+          maxTimeoutSeconds: 300,
+          extra: {},
+        };
+
+        // Verify the payment with the facilitator
+        const verifyResult = await facilitatorClient.verify(payment_payload, paymentRequirements);
+
+        if (!verifyResult.isValid) {
+          return c.json({
+            error: 'Payment verification failed',
+            reason: verifyResult.invalidReason,
+            message: verifyResult.invalidMessage,
+          }, 402);
+        }
+
+        // Settle the payment after successful verification
+        const settleResult = await facilitatorClient.settle(payment_payload, paymentRequirements);
+
+        if (!settleResult.success) {
+          return c.json({
+            error: 'Payment settlement failed',
+            reason: settleResult.errorReason,
+            message: settleResult.errorMessage,
+          }, 402);
+        }
+
+        console.log('x402 payment verified and settled:', settleResult.transaction);
+      } catch (paymentError) {
+        console.error('x402 payment verification error:', paymentError);
+        return c.json({ error: 'Payment verification failed', details: (paymentError as Error).message }, 402);
+      }
+    } else if (!payment_receipt) {
+      // No payment provided - require payment for agent spend
+      return c.json({
+        error: 'Payment required',
+        x402: {
+          version: 2,
+          accepts: [{
+            scheme: 'exact',
+            network: 'base',
+            amount: Math.round(cost * 1000000).toString(),
+            asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA0293',
+            payTo: c.env.X402_PAYMENT_ADDRESS || '0x0000000000000000000000000000000000000000',
+            maxTimeoutSeconds: 300,
+            extra: {},
+          }],
+        },
+      }, 402);
     }
 
     const sql = neon(c.env.NEON_DATABASE_URL);
