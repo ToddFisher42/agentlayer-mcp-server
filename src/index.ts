@@ -9,43 +9,96 @@ type Bindings = {
   FIRECRAWL_API_KEY: string;
   STRIPE_SECRET_KEY: string;
   DB: D1Database;
+  RATE_LIMIT_KV: KVNamespace;
 };
 
 type Variables = {
   apiKey: string;
+  tier: string;
   rateLimit: number;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Auth middleware - validates API key
+// Hash API key using SHA-256 for database comparison
+async function hashApiKey(key: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Auth middleware - validates API key against database
 app.use('*', async (c, next) => {
   const apiKey = c.req.header('X-API-Key') || c.req.query('api_key');
   if (!apiKey) {
     return c.json({ error: 'Missing API key' }, 401);
   }
-  // TODO: Validate against database
-  c.set('apiKey', apiKey);
+
+  try {
+    const sql = neon(c.env.NEON_DATABASE_URL);
+    const keyHash = await hashApiKey(apiKey);
+
+    const result = await sql`
+      SELECT tier, rate_limit FROM api_keys WHERE key_hash = ${keyHash}
+    `;
+
+    if (!result || result.length === 0) {
+      return c.json({ error: 'Invalid API key' }, 401);
+    }
+
+    const { tier, rate_limit } = result[0];
+
+    // Update last_used timestamp
+    await sql`
+      UPDATE api_keys SET last_used = NOW() WHERE key_hash = ${keyHash}
+    `;
+
+    c.set('apiKey', apiKey);
+    c.set('tier', tier || 'starter');
+    c.set('rateLimit', rate_limit || 100);
+  } catch (error) {
+    console.error('API key validation error:', error);
+    return c.json({ error: 'Authentication failed' }, 401);
+  }
+
   await next();
 });
 
-// Rate limiting middleware (simple in-memory, use KV for production)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+// Rate limiting middleware using Cloudflare KV for persistence across worker instances
 app.use('*', async (c, next) => {
   const apiKey = c.get('apiKey');
+  const maxRequests = c.get('rateLimit') || 100;
   const now = Date.now();
   const windowMs = 60 * 1000; // 1 minute
-  const maxRequests = 100;
 
-  const record = rateLimitStore.get(apiKey);
-  if (!record || record.resetTime < now) {
-    rateLimitStore.set(apiKey, { count: 1, resetTime: now + windowMs });
-  } else {
-    if (record.count >= maxRequests) {
-      return c.json({ error: 'Rate limit exceeded' }, 429);
+  const kvKey = `rate_limit:${apiKey}`;
+
+  try {
+    const stored = await c.env.RATE_LIMIT_KV.get(kvKey, 'json');
+    const record = stored as { count: number; resetTime: number } | null;
+
+    if (!record || record.resetTime < now) {
+      // First request in window or window expired
+      const newRecord = { count: 1, resetTime: now + windowMs };
+      await c.env.RATE_LIMIT_KV.put(kvKey, JSON.stringify(newRecord), {
+        expirationTtl: Math.ceil(windowMs / 1000), // TTL in seconds
+      });
+    } else {
+      if (record.count >= maxRequests) {
+        return c.json({ error: 'Rate limit exceeded', limit: maxRequests }, 429);
+      }
+      record.count++;
+      await c.env.RATE_LIMIT_KV.put(kvKey, JSON.stringify(record), {
+        expirationTtl: Math.ceil((record.resetTime - now) / 1000),
+      });
     }
-    record.count++;
+  } catch (error) {
+    console.error('Rate limit KV error:', error);
+    // Fail open - allow request if KV is unavailable
   }
+
   await next();
 });
 
@@ -58,6 +111,7 @@ app.use('*', async (c, next) => {
     method: c.req.method,
     path: c.req.path,
     apiKey: c.get('apiKey'),
+    tier: c.get('tier'),
     status: c.res.status,
     duration,
     timestamp: new Date().toISOString(),
