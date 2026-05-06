@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import Stripe from 'stripe';
+import { StripeBillingService, StripeBillingConfig } from './services/stripe-billing.js';
 import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
 import qualityScoresV1 from './routes/v1-quality-scores.js';
 
@@ -13,6 +14,9 @@ type Bindings = {
   FIRECRAWL_API_KEY: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_STARTER_PRICE_ID: string;
+  STRIPE_PRO_MONTHLY_PRICE_ID: string;
+  STRIPE_SCALE_MONTHLY_PRICE_ID: string;
   DB: D1Database;
   RATE_LIMIT_KV: KVNamespace;
 };
@@ -213,15 +217,16 @@ app.get('/agent-spend', async (c) => {
 
 // Stripe webhook endpoint for subscription management
 app.post('/webhooks/stripe', async (c) => {
-  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' as any });
   const signature = c.req.header('stripe-signature');
-  const webhookSecret = c.env.STRIPE_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    return c.json({ error: 'Webhook secret not configured' }, 500);
+
+  if (!signature) {
+    return c.json({ error: 'Missing stripe-signature header' }, 400);
   }
+
   try {
     const body = await c.req.text();
-    const event = stripe.webhooks.constructEvent(body, signature!, webhookSecret);
+    const event = stripe.webhooks.constructEvent(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
     // Handle subscription events
     switch (event.type) {
       case 'customer.subscription.created':
@@ -229,10 +234,17 @@ app.post('/webhooks/stripe', async (c) => {
       case 'customer.subscription.deleted':
         console.log('Subscription event:', event.type, event.data.object);
         break;
+      case 'invoice.payment_succeeded':
+        console.log('Payment succeeded:', event.data.object);
+        break;
+      case 'invoice.payment_failed':
+        console.log('Payment failed:', event.data.object);
+        break;
     }
     return c.json({ received: true });
   } catch (error) {
-    return c.json({ error: 'Webhook error' }, 400);
+    console.error('Webhook error:', error);
+    return c.json({ error: 'Webhook verification failed' }, 400);
   }
 });
 
@@ -251,7 +263,7 @@ app.post('/checkout/:tier', async (c) => {
       return c.json({ error: `Invalid tier. Must be one of: ${validTiers.join(', ')}` }, 400);
     }
 
-    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' as any });
 
     // Get or create customer
     const customers = await stripe.customers.list({ email, limit: 1 });
@@ -262,9 +274,9 @@ app.post('/checkout/:tier', async (c) => {
 
     // Get price ID based on tier
     const priceIds: Record<string, string> = {
-      starter: c.env.STRIPE_STARTER_PRICE_ID!,
-      pro: c.env.STRIPE_PRO_MONTHLY_PRICE_ID!,
-      scale: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID!,
+      starter: c.env.STRIPE_STARTER_PRICE_ID,
+      pro: c.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+      scale: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID,
     };
     const priceId = priceIds[tier];
     if (!priceId) {
