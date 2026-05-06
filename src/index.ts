@@ -217,7 +217,6 @@ app.get('/agent-spend', async (c) => {
 
 // Stripe webhook endpoint for subscription management
 app.post('/webhooks/stripe', async (c) => {
-  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' as any });
   const signature = c.req.header('stripe-signature');
 
   if (!signature) {
@@ -226,22 +225,18 @@ app.post('/webhooks/stripe', async (c) => {
 
   try {
     const body = await c.req.text();
-    const event = stripe.webhooks.constructEvent(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
-    // Handle subscription events
-    switch (event.type) {
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-      case 'customer.subscription.deleted':
-        console.log('Subscription event:', event.type, event.data.object);
-        break;
-      case 'invoice.payment_succeeded':
-        console.log('Payment succeeded:', event.data.object);
-        break;
-      case 'invoice.payment_failed':
-        console.log('Payment failed:', event.data.object);
-        break;
-    }
-    return c.json({ received: true });
+
+    const config: StripeBillingConfig = {
+      starterPriceId: c.env.STRIPE_STARTER_PRICE_ID,
+      proPriceId: c.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+      scalePriceId: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID,
+      databaseUrl: c.env.NEON_DATABASE_URL,
+    };
+
+    const billingService = new StripeBillingService(c.env.STRIPE_SECRET_KEY, config);
+    const event = await billingService.handleWebhookEvent(body, signature, c.env.STRIPE_WEBHOOK_SECRET);
+
+    return c.json({ received: true, type: event.type });
   } catch (error) {
     console.error('Webhook error:', error);
     return c.json({ error: 'Webhook verification failed' }, 400);
@@ -263,38 +258,28 @@ app.post('/checkout/:tier', async (c) => {
       return c.json({ error: `Invalid tier. Must be one of: ${validTiers.join(', ')}` }, 400);
     }
 
-    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' as any });
+    const config: StripeBillingConfig = {
+      starterPriceId: c.env.STRIPE_STARTER_PRICE_ID,
+      proPriceId: c.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+      scalePriceId: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID,
+      databaseUrl: c.env.NEON_DATABASE_URL,
+    };
+
+    const billingService = new StripeBillingService(c.env.STRIPE_SECRET_KEY, config);
 
     // Get or create customer
-    const customers = await stripe.customers.list({ email, limit: 1 });
-    let customer = customers.data[0];
-    if (!customer) {
-      customer = await stripe.customers.create({ email });
-    }
+    const customer = await billingService.findOrCreateCustomer(email);
 
-    // Get price ID based on tier
-    const priceIds: Record<string, string> = {
-      starter: c.env.STRIPE_STARTER_PRICE_ID,
-      pro: c.env.STRIPE_PRO_MONTHLY_PRICE_ID,
-      scale: c.env.STRIPE_SCALE_MONTHLY_PRICE_ID,
-    };
-    const priceId = priceIds[tier];
-    if (!priceId) {
-      return c.json({ error: 'Price ID not configured for tier' }, 500);
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      customer: customer.id,
-      payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: 'subscription',
+    const session = await billingService.createCheckoutSession(
+      customer.id,
+      tier,
       success_url,
-      cancel_url,
-      metadata: { tier },
-    });
+      cancel_url
+    );
 
     return c.json({ session_id: session.id, url: session.url });
   } catch (error) {
+    console.error('Checkout error:', error);
     return c.json({ error: 'Failed to create checkout session' }, 500);
   }
 });
