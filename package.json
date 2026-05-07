@@ -1,7 +1,9 @@
 {
   "name": "agentlayer-mcp-server",
-  "version": "1.0.0",
+  "version": "3.0.0",
+  "mcpName": "io.github.ToddFisher42/agentlayer-mcp-server",
   "type": "module",
+  "mcpName": "io.github.ToddFisher42/agentlayer-mcp-server",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
@@ -9,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@hono/mcp": "^0.2.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@neondatabase/serverless": "^0.9.5",
     "@x402/core": "^2.11.0",
     "hono": "^4.0.0",

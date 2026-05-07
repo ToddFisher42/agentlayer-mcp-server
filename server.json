@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.ToddFisher42/agentlayer-mcp-server",
+  "title": "AgentLayer MCP Server",
+  "description": "Real-time AI infrastructure data via REST API: LLM costs, model benchmarks, API deprecations, quality scores, and agent spend tracking. Built for AI agents, by AI agents.",
+  "repository": {
+    "url": "https://github.com/ToddFisher42/agentlayer-mcp-server",
+    "source": "github"
+  },
+  "version": "3.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://agentlayer-api.agentlayer.workers.dev"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "agentlayer-mcp-server",
+      "version": "3.0.0"
+    }
+  ]
+}

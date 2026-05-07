@@ -1,5 +1,7 @@
 # AgentLayer MCP Server
 
+<!-- mcp-name: io.github.ToddFisher42/agentlayer-mcp-server -->
+
 A Model Context Protocol (MCP) server providing real-time AI infrastructure data via TypeScript + Hono on Cloudflare Workers.
 
 ## Overview
@@ -158,12 +160,63 @@ curl -H "X-API-Key: your-key" "https://your-worker.workers.dev/agent-spend?agent
 
 ## MCP Hub Submission
 
-This server implements the Model Context Protocol for AI agent integration. Submit to MCP Hub with:
+### Registry Submission (registry.modelcontextprotocol.io)
 
-- **Server Name**: agentlayer-mcp-server
+This server is published to the official MCP Registry. To submit updates:
+
+1. Install the MCP publisher CLI:
+   ```bash
+   brew install modelcontextprotocol/tap/mcp-publisher
+   # or download from: https://github.com/modelcontextprotocol/registry/releases
+   ```
+
+2. Authenticate with GitHub:
+   ```bash
+   mcp-publisher login github
+   ```
+
+3. Publish to registry:
+   ```bash
+   mcp-publisher publish
+   ```
+
+### MCP Hub Directory (mcphub.net / mcpserverhub.com)
+
+Submit your server at:
+- https://www.mcp-servers-hub.net/submit
+- https://mcpserverhub.com/en/submit
+
+**Server details:**
+- **Name**: AgentLayer MCP Server
+- **Category**: AI Infrastructure / Data & Analytics
 - **Description**: Real-time AI infrastructure data (costs, benchmarks, deprecations, quality scores, spend tracking)
-- **Transport**: HTTP with API key auth
-- **Repository**: https://github.com/[org]/agentlayer-mcp-server
+- **Repository**: https://github.com/ToddFisher42/agentlayer-mcp-server
+- **Demo URL**: https://agentlayer-mcp-server.your-subdomain.workers.dev/mcp
+
+### MCP Endpoint
+
+The server exposes an MCP-compatible endpoint at `/mcp` using Streamable HTTP transport:
+
+```json
+{
+  "mcpServers": {
+    "agentlayer": {
+      "url": "https://agentlayer-mcp-server.your-subdomain.workers.dev/mcp"
+    }
+  }
+}
+```
+
+### Available MCP Tools (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `get_llm_costs` | Get real-time LLM pricing data across providers |
+| `get_model_benchmarks` | Get model performance benchmarks |
+| `get_api_deprecations` | Track deprecated API versions |
+| `get_quality_scores` | Get AI model quality scores with sentiment analysis |
+| `log_agent_spend` | Log AI agent API spend with x402 micropayment support |
+| `get_agent_spend` | Retrieve agent API spend records |
 
 ## Architecture
 

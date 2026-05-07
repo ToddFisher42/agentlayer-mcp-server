@@ -5,6 +5,8 @@ import { StripeBillingService, StripeBillingConfig } from './services/stripe-bil
 import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
 import qualityScoresV1 from './routes/v1-quality-scores.js';
 import { HTTPFacilitatorClient } from '@x402/core/server';
+import { StreamableHTTPTransport } from '@hono/mcp';
+import { createMcpServer } from './mcp-server.js';
 
 // Cloudflare Workers types
 type D1Database = any;
@@ -168,8 +170,8 @@ app.get('/api-deprecations', async (c) => {
   }
 });
 
-// Mount v1 routes
-app.route('/v1/quality-scores', qualityScoresV1);
+// Mount quality-scores endpoint (spec: /quality-scores)
+app.route('/quality-scores', qualityScoresV1);
 
 // POST /agent-spend - Log agent API spend (x402 micropayment support)
 app.post('/agent-spend', async (c) => {
@@ -344,5 +346,13 @@ app.post('/checkout/:tier', async (c) => {
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// MCP Protocol endpoint - Streamable HTTP transport
+app.all('/mcp', async (c) => {
+  const mcpServer = createMcpServer();
+  const transport = new StreamableHTTPTransport();
+  await mcpServer.connect(transport);
+  return transport.handleRequest(c);
+});
 
 export default app;
