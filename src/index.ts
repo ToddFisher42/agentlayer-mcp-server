@@ -6,7 +6,7 @@ import { runSentimentScraper } from './scrapers/reddit-hn-sentiment.js';
 import qualityScoresV1 from './routes/v1-quality-scores.js';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { StreamableHTTPTransport } from '@hono/mcp';
-import { createMcpServer } from './mcp-server.js';
+import { createMcpServer, McpServerEnv } from './mcp-server.js';
 
 // Cloudflare Workers types
 type D1Database = any;
@@ -349,10 +349,18 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 
 // MCP Protocol endpoint - Streamable HTTP transport
 app.all('/mcp', async (c) => {
-  const mcpServer = createMcpServer();
-  const transport = new StreamableHTTPTransport();
-  await mcpServer.connect(transport);
-  return transport.handleRequest(c);
+  try {
+    const mcpServerEnv: McpServerEnv = {
+      NEON_DATABASE_URL: c.env.NEON_DATABASE_URL,
+    };
+    const mcpServer = createMcpServer(mcpServerEnv);
+    const transport = new StreamableHTTPTransport();
+    await mcpServer.connect(transport);
+    return transport.handleRequest(c);
+  } catch (error) {
+    console.error('MCP handler error:', error);
+    return c.json({ error: 'MCP request failed', message: (error as Error).message }, 500);
+  }
 });
 
 export default app;

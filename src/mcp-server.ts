@@ -2,11 +2,21 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod/v4';
 import { neon } from '@neondatabase/serverless';
 
-export function createMcpServer(): McpServer {
+export interface McpServerEnv {
+  NEON_DATABASE_URL: string;
+}
+
+export function createMcpServer(env: McpServerEnv): McpServer {
+  const dbUrl = env.NEON_DATABASE_URL;
+
   const server = new McpServer({
     name: 'agentlayer-mcp-server',
     version: '1.0.0',
   });
+
+  function query(): ReturnType<typeof neon> {
+    return neon(dbUrl);
+  }
 
   // Tool: Get LLM costs
   server.tool(
@@ -15,7 +25,7 @@ export function createMcpServer(): McpServer {
     {},
     async () => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         const costs = await sql`SELECT * FROM llm_costs ORDER BY model_name`;
         return {
           content: [{ type: 'text', text: JSON.stringify({ data: costs }, null, 2) }],
@@ -39,7 +49,7 @@ export function createMcpServer(): McpServer {
     },
     async ({ model, benchmark }) => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         let benchmarks;
         if (model && benchmark) {
           benchmarks = await sql`
@@ -83,7 +93,7 @@ export function createMcpServer(): McpServer {
     },
     async ({ active_only }) => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         const deprecations = active_only
           ? await sql`SELECT * FROM api_deprecations WHERE deprecated = true ORDER BY deprecation_date`
           : await sql`SELECT * FROM api_deprecations ORDER BY deprecation_date`;
@@ -109,7 +119,7 @@ export function createMcpServer(): McpServer {
     },
     async ({ model, refresh }) => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         if (model) {
           const scores = await sql`SELECT * FROM quality_scores WHERE model = ${model} ORDER BY timestamp DESC`;
           return {
@@ -142,14 +152,14 @@ export function createMcpServer(): McpServer {
     },
     async ({ agent_id, model, tokens_used, cost, payment_receipt }) => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         const result = await sql`
           INSERT INTO agent_spend (agent_id, model, tokens_used, cost, payment_receipt, timestamp)
           VALUES (${agent_id}, ${model}, ${tokens_used}, ${cost}, ${payment_receipt || null}, NOW())
           RETURNING *
         `;
         return {
-          content: [{ type: 'text', text: JSON.stringify({ data: result[0] }, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify({ data: (result as any[])[0] }, null, 2) }],
         };
       } catch (error) {
         return {
@@ -170,7 +180,7 @@ export function createMcpServer(): McpServer {
     },
     async ({ agent_id, limit }) => {
       try {
-        const sql = neon(process.env.NEON_DATABASE_URL || '');
+        const sql = query();
         const records = agent_id
           ? await sql`SELECT * FROM agent_spend WHERE agent_id = ${agent_id} ORDER BY timestamp DESC LIMIT ${limit}`
           : await sql`SELECT * FROM agent_spend ORDER BY timestamp DESC LIMIT ${limit}`;

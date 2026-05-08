@@ -1,24 +1,23 @@
 name = "agentlayer-mcp-server"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Secrets should be set via: wrangler secret put SECRET_NAME
-# Required secrets:
-#   STRIPE_SECRET_KEY
-#   STRIPE_WEBHOOK_SECRET
-#   NEON_DATABASE_URL
+# Secrets are set via: wrangler secret put SECRET_NAME
+# Required secrets: NEON_DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, X402_PRIVATE_KEY
 
 [vars]
 FIRECRAWL_API_KEY = ""
 STRIPE_STARTER_PRICE_ID = ""
 STRIPE_PRO_MONTHLY_PRICE_ID = ""
 STRIPE_SCALE_MONTHLY_PRICE_ID = ""
+X402_PAYMENT_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "agentlayer"
-database_id = ""
+database_id = "ACTUAL_ID" # Set via: wrangler d1 create "agentlayer"
 
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
-id = "" # Create with: wrangler kv namespace create "agentlayer-rate-limits"
+id = "ACTUAL_ID" # Create with: wrangler kv namespace create "agentlayer-rate-limits"

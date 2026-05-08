@@ -3,7 +3,6 @@
   "version": "3.0.0",
   "mcpName": "io.github.ToddFisher42/agentlayer-mcp-server",
   "type": "module",
-  "mcpName": "io.github.ToddFisher42/agentlayer-mcp-server",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
@@ -16,6 +15,7 @@
     "@neondatabase/serverless": "^0.9.5",
     "@x402/core": "^2.11.0",
     "hono": "^4.0.0",
+    "hono-rate-limiter": "^0.4.2",
     "pg": "^8.20.0",
     "stripe": "^14.0.0"
   },

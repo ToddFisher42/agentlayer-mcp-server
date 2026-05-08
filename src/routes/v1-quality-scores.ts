@@ -4,12 +4,13 @@ import { runSentimentScraper } from '../scrapers/reddit-hn-sentiment.js';
 
 type Bindings = {
   NEON_DATABASE_URL: string;
+  FIRECRAWL_API_KEY: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// GET /v1/quality-scores - Returns quality scores from Reddit/HN sentiment data
-app.get('/v1/quality-scores', async (c) => {
+// GET /quality-scores - Returns quality scores from Reddit/HN sentiment data
+app.get('/', async (c) => {
   try {
     const sql = neon(c.env.NEON_DATABASE_URL);
     const refresh = c.req.query('refresh') === 'true';
@@ -19,7 +20,7 @@ app.get('/v1/quality-scores', async (c) => {
       // Trigger fresh sentiment scraping from Reddit/HN
       const records = await runSentimentScraper({
         NEON_DATABASE_URL: c.env.NEON_DATABASE_URL,
-        FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY || '',
+        FIRECRAWL_API_KEY: c.env.FIRECRAWL_API_KEY || '',
       });
 
       if (model) {
@@ -65,12 +66,12 @@ app.get('/v1/quality-scores', async (c) => {
   }
 });
 
-// POST /v1/quality-scores/refresh - Force refresh sentiment data
-app.post('/v1/quality-scores/refresh', async (c) => {
+// POST /quality-scores/refresh - Force refresh sentiment data
+app.post('/refresh', async (c) => {
   try {
     const records = await runSentimentScraper({
       NEON_DATABASE_URL: c.env.NEON_DATABASE_URL,
-      FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY || '',
+      FIRECRAWL_API_KEY: c.env.FIRECRAWL_API_KEY || '',
     });
     return c.json({
       message: 'Quality scores refreshed successfully',
@@ -83,8 +84,8 @@ app.post('/v1/quality-scores/refresh', async (c) => {
   }
 });
 
-// GET /v1/quality-scores/models - List all models with scores
-app.get('/v1/quality-scores/models', async (c) => {
+// GET /quality-scores/models - List all models with scores
+app.get('/models', async (c) => {
   try {
     const sql = neon(c.env.NEON_DATABASE_URL);
     const models = await sql`
