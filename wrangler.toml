@@ -21,3 +21,6 @@ database_id = "ACTUAL_ID" # Set via: wrangler d1 create "agentlayer"
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
 id = "ACTUAL_ID" # Create with: wrangler kv namespace create "agentlayer-rate-limits"
+
+[[triggers.crons]]
+cron = "0 18 * * *" # Run daily at 18:00 UTC for sentiment scraper

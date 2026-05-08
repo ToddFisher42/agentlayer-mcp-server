@@ -41,19 +41,19 @@ jobs:
             X402_PAYMENT_ADDRESS
 
       - name: Publish to MCP Registry
-         if: startsWith(github.ref, 'refs/tags/v')
-         continue-on-error: true
-         run: |
-           # Download mcp-publisher CLI
-           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+        if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        run: |
+          # Download mcp-publisher CLI
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
 
-           # Authenticate using GitHub OIDC (no secrets needed)
-           ./mcp-publisher login github-oidc
+          # Authenticate using GitHub OIDC (no secrets needed)
+          ./mcp-publisher login github-oidc
 
-           # Verify server.json is valid
-           ./mcp-publisher validate
+          # Verify server.json is valid
+          ./mcp-publisher validate
 
-           # Publish to MCP Registry
-           ./mcp-publisher publish
-         env:
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Publish to MCP Registry
+          ./mcp-publisher publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

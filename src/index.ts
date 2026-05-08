@@ -363,4 +363,37 @@ app.all('/mcp', async (c) => {
   }
 });
 
-export default app;
+export interface Env extends Bindings {}
+
+export default {
+  fetch: app.fetch,
+
+  async scheduled(
+    event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    ctx.waitUntil(handleScheduledEvent(env));
+  },
+};
+
+async function handleScheduledEvent(env: Env): Promise<void> {
+  console.log('[Scheduled] Starting daily sentiment scraper job...');
+
+  try {
+    const records = await runSentimentScraper({
+      NEON_DATABASE_URL: env.NEON_DATABASE_URL,
+      FIRECRAWL_API_KEY: env.FIRECRAWL_API_KEY || '',
+    });
+
+    console.log(
+      `[Scheduled] Sentiment scraper completed. Processed ${records.length} models:`
+    );
+    records.forEach((r: any) => {
+      console.log(`  - ${r.model}: ${r.score.toFixed(2)} (${r.post_count} posts)`);
+    });
+  } catch (error) {
+    console.error('[Scheduled] Daily sentiment scraper failed:', error);
+    throw error;
+  }
+}
